@@ -1,31 +1,15 @@
-import { Link } from 'react-router-dom';
-import { MdShoppingBasket } from 'react-icons/md';
+import Link from 'next/link';
 
-import logo from '../../assets/images/logo.svg';
-import { Container, Cart } from './styles';
-import { useCart } from '../../hooks/useCart';
+import styles from './header.module.scss';
 
-const Header = (): JSX.Element => {
-  const { cart } = useCart();
-  const cartSize = cart.length;
-
+export default function Header() {
   return (
-    <Container>
-      <Link to="/">
-        <img src={logo} alt="Rocketshoes" />
+    <header className={styles.header}>
+      <Link href="/">
+        <a>
+          <img src="/logo.svg" alt="logo" />
+        </a>
       </Link>
-
-      <Cart to="/cart">
-        <div>
-          <strong>Meu carrinho</strong>
-          <span data-testid="cart-size">
-            {cartSize === 1 ? `${cartSize} item` : `${cartSize} itens`}
-          </span>
-        </div>
-        <MdShoppingBasket size={36} color="#FFF" />
-      </Cart>
-    </Container>
+    </header>
   );
-};
-
-export default Header;
+}

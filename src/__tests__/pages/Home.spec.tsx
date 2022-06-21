@@ -1,115 +1,217 @@
-import AxiosMock from 'axios-mock-adapter';
-import { waitFor, render, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { GetStaticPropsContext } from 'next';
+import { ParsedUrlQuery } from 'querystring';
+import { RouterContext } from 'next/dist/next-server/lib/router-context';
 
-import { api } from '../../services/api';
-import Home from '../../pages/Home';
-import { useCart } from '../../hooks/useCart';
+import { getPrismicClient } from '../../services/prismic';
+import App, { getStaticProps } from '../../pages';
 
-const apiMock = new AxiosMock(api);
-const mockedAddProduct = jest.fn();
-const mockedUseCartHook = useCart as jest.Mock;
+interface Post {
+  uid?: string;
+  first_publication_date: string | null;
+  data: {
+    title: string;
+    subtitle: string;
+    author: string;
+  };
+}
 
-jest.mock('../../hooks/useCart');
+interface PostPagination {
+  next_page: string;
+  results: Post[];
+}
 
-describe('Home Page', () => {
+interface HomeProps {
+  postsPagination: PostPagination;
+}
+
+interface GetStaticPropsResult {
+  props: HomeProps;
+}
+
+const mockedQueryReturn = {
+  next_page: 'link',
+  results: [
+    {
+      uid: 'como-utilizar-hooks',
+      first_publication_date: '2021-03-15T19:25:28+0000',
+      data: {
+        title: 'Como utilizar Hooks',
+        subtitle: 'Pensando em sincronização em vez de ciclos de vida',
+        author: 'Joseph Oliveira',
+      },
+    },
+    {
+      uid: 'criando-um-app-cra-do-zero',
+      first_publication_date: '2021-03-25T19:27:35+0000',
+      data: {
+        title: 'Criando um app CRA do zero',
+        subtitle:
+          'Tudo sobre como criar a sua primeira aplicação utilizando Create React App',
+        author: 'Danilo Vieira',
+      },
+    },
+  ],
+};
+
+jest.mock('@prismicio/client');
+jest.mock('../../services/prismic');
+
+const mockedPrismic = getPrismicClient as jest.Mock;
+const mockedFetch = jest.spyOn(window, 'fetch') as jest.Mock;
+const mockedPush = jest.fn();
+let RouterWrapper;
+
+describe('Home', () => {
   beforeAll(() => {
-    apiMock.onGet('products').reply(200, [
-      {
-        id: 1,
-        image:
-          'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis1.jpg',
-        price: 179.9,
-        title: 'Tênis de Caminhada Leve Confortável',
-      },
-      {
-        id: 2,
-        image:
-          'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis2.jpg',
-        price: 139.9,
-        title: 'Tênis VR Caminhada Confortável Detalhes Couro Masculino',
-      },
-      {
-        id: 3,
-        title: 'Tênis Adidas Duramo Lite 2.0',
-        price: 219.9,
-        image:
-          'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis3.jpg',
-      },
-    ]);
-  });
+    mockedPush.mockImplementation(() => Promise.resolve());
+    const MockedRouterContext = RouterContext as React.Context<unknown>;
+    RouterWrapper = ({ children }): JSX.Element => {
+      return (
+        <MockedRouterContext.Provider
+          value={{
+            push: mockedPush,
+          }}
+        >
+          {children}
+        </MockedRouterContext.Provider>
+      );
+    };
 
-  beforeEach(() => {
-    mockedUseCartHook.mockReturnValue({
-      cart: [
-        {
-          amount: 2,
-          id: 1,
-          image:
-            'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis1.jpg',
-          price: 179.9,
-          title: 'Tênis de Caminhada Leve Confortável',
-        },
-        {
-          amount: 1,
-          id: 2,
-          image:
-            'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis2.jpg',
-          price: 139.9,
-          title: 'Tênis VR Caminhada Confortável Detalhes Couro Masculino',
-        },
-      ],
-      addProduct: mockedAddProduct,
+    mockedPrismic.mockReturnValue({
+      query: () => {
+        return Promise.resolve(mockedQueryReturn);
+      },
+    });
+
+    mockedFetch.mockImplementation(() => {
+      return Promise.resolve({
+        json: () =>
+          Promise.resolve({
+            next_page: null,
+            results: [
+              {
+                uid: 'criando-um-app-cra-do-zero',
+                first_publication_date: '2021-03-25T19:27:35+0000',
+                data: {
+                  title: 'Criando um app CRA do zero',
+                  subtitle:
+                    'Tudo sobre como criar a sua primeira aplicação utilizando Create React App',
+                  author: 'Danilo Vieira',
+                },
+              },
+            ],
+          }),
+      });
     });
   });
 
-  it('should be able to render each product quantity added to cart', async () => {
-    const { getAllByTestId } = render(<Home />);
+  it('should be able to return prismic posts documents using getStaticProps', async () => {
+    const postsPaginationReturn = mockedQueryReturn;
 
-    await waitFor(() => getAllByTestId('cart-product-quantity'), {
-      timeout: 200,
-    });
+    const getStaticPropsContext: GetStaticPropsContext<ParsedUrlQuery> = {};
 
-    const [
-      firstProductCartQuantity,
-      secondProductCartQuantity,
-      thirdProductCartQuantity,
-    ] = getAllByTestId('cart-product-quantity');
+    const response = (await getStaticProps(
+      getStaticPropsContext
+    )) as GetStaticPropsResult;
 
-    expect(firstProductCartQuantity).toHaveTextContent('2');
-    expect(secondProductCartQuantity).toHaveTextContent('1');
-    expect(thirdProductCartQuantity).toHaveTextContent('0');
+    expect(response.props.postsPagination.next_page).toEqual(
+      postsPaginationReturn.next_page
+    );
+    expect(response.props.postsPagination.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining(postsPaginationReturn.results[0]),
+        expect.objectContaining(postsPaginationReturn.results[1]),
+      ])
+    );
   });
 
-  it('should be able to add a product to cart', async () => {
-    const { getAllByTestId, rerender } = render(<Home />);
+  it('should be able to render posts documents info', () => {
+    const postsPagination = mockedQueryReturn;
 
-    await waitFor(() => getAllByTestId('add-product-button'), {
-      timeout: 200,
+    render(<App postsPagination={postsPagination} />);
+
+    screen.getByText('Como utilizar Hooks');
+    screen.getByText('Pensando em sincronização em vez de ciclos de vida');
+    screen.getByText('15 mar 2021');
+    screen.getByText('Joseph Oliveira');
+
+    screen.getByText('Criando um app CRA do zero');
+    screen.getByText(
+      'Tudo sobre como criar a sua primeira aplicação utilizando Create React App'
+    );
+    screen.getByText('15 mar 2021');
+    screen.getByText('Danilo Vieira');
+  });
+
+  it('should be able to navigate to post page after a click', () => {
+    const postsPagination = mockedQueryReturn;
+
+    render(<App postsPagination={postsPagination} />, {
+      wrapper: RouterWrapper,
     });
 
-    const [addFirstProduct] = getAllByTestId('add-product-button');
+    const firstPostTitle = screen.getByText('Como utilizar Hooks');
+    const secondPostTitle = screen.getByText('Criando um app CRA do zero');
 
-    fireEvent.click(addFirstProduct);
+    fireEvent.click(firstPostTitle);
+    fireEvent.click(secondPostTitle);
 
-    expect(mockedAddProduct).toHaveBeenCalledWith(1);
+    expect(mockedPush).toHaveBeenNthCalledWith(
+      1,
+      '/post/como-utilizar-hooks',
+      expect.anything(),
+      expect.anything()
+    );
+    expect(mockedPush).toHaveBeenNthCalledWith(
+      2,
+      '/post/criando-um-app-cra-do-zero',
+      expect.anything(),
+      expect.anything()
+    );
+  });
 
-    mockedUseCartHook.mockReturnValueOnce({
-      cart: [
-        {
-          amount: 3,
-          id: 1,
-          image:
-            'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis1.jpg',
-          price: 179.9,
-          title: 'Tênis de Caminhada Leve Confortável',
+  it('should be able to load more posts if available', async () => {
+    const postsPagination = { ...mockedQueryReturn };
+    postsPagination.results = [
+      {
+        uid: 'como-utilizar-hooks',
+        first_publication_date: '2021-03-15T19:25:28+0000',
+        data: {
+          title: 'Como utilizar Hooks',
+          subtitle: 'Pensando em sincronização em vez de ciclos de vida',
+          author: 'Joseph Oliveira',
         },
-      ],
-    });
+      },
+    ];
 
-    rerender(<Home />);
+    render(<App postsPagination={postsPagination} />);
 
-    const [firstProductCartQuantity] = getAllByTestId('cart-product-quantity');
+    screen.getByText('Como utilizar Hooks');
+    const loadMorePostsButton = screen.getByText('Carregar mais posts');
 
-    expect(firstProductCartQuantity).toHaveTextContent('3');
+    fireEvent.click(loadMorePostsButton);
+
+    await waitFor(
+      () => {
+        expect(mockedFetch).toHaveBeenCalled();
+      },
+      { timeout: 200 }
+    );
+
+    screen.getByText('Criando um app CRA do zero');
+  });
+
+  it('should not be able to load more posts if not available', async () => {
+    const postsPagination = mockedQueryReturn;
+    postsPagination.next_page = null;
+
+    render(<App postsPagination={postsPagination} />);
+
+    screen.getByText('Como utilizar Hooks');
+    screen.getByText('Criando um app CRA do zero');
+    const loadMorePostsButton = screen.queryByText('Carregar mais posts');
+
+    expect(loadMorePostsButton).not.toBeInTheDocument();
   });
 });
