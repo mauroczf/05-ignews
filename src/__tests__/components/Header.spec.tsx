@@ -1,47 +1,43 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { RouterContext } from 'next/dist/next-server/lib/router-context';
-
+import { render } from '@testing-library/react';
+import { ReactNode } from 'react';
 import Header from '../../components/Header';
 
-const mockedPush = jest.fn();
-let RouterWrapper;
+jest.mock('react-router-dom', () => {
+  return {
+    Link: ({ children }: { children: ReactNode }) => children,
+  };
+});
 
-describe('Header', () => {
-  beforeAll(() => {
-    mockedPush.mockImplementation(() => Promise.resolve());
-    const MockedRouterContext = RouterContext as React.Context<unknown>;
-    RouterWrapper = ({ children }): JSX.Element => {
-      return (
-        <MockedRouterContext.Provider
-          value={{
-            push: mockedPush,
-          }}
-        >
-          {children}
-        </MockedRouterContext.Provider>
-      );
-    };
-  });
+jest.mock('../../hooks/useCart', () => {
+  return {
+    useCart: () => ({
+      cart: [
+        {
+          amount: 2,
+          id: 1,
+          image:
+            'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis1.jpg',
+          price: 179.9,
+          title: 'Tênis de Caminhada Leve Confortável',
+        },
+        {
+          amount: 1,
+          id: 2,
+          image:
+            'https://rocketseat-cdn.s3-sa-east-1.amazonaws.com/modulo-redux/tenis2.jpg',
+          price: 139.9,
+          title: 'Tênis VR Caminhada Confortável Detalhes Couro Masculino',
+        },
+      ],
+    }),
+  };
+});
 
-  it('should be able to render logo', () => {
-    render(<Header />);
+describe('Header Component', () => {
+  it('should be able to render the amount of products added to cart', () => {
+    const { getByTestId } = render(<Header />);
 
-    screen.getByAltText('logo');
-  });
-
-  it('should be able to navigate to home page after a click', () => {
-    render(<Header />, {
-      wrapper: RouterWrapper,
-    });
-
-    const secondLink = screen.getByAltText('logo');
-
-    fireEvent.click(secondLink);
-
-    expect(mockedPush).toHaveBeenCalledWith(
-      '/',
-      expect.anything(),
-      expect.anything()
-    );
+    const cartSizeCounter = getByTestId('cart-size');
+    expect(cartSizeCounter).toHaveTextContent('2 itens');
   });
 });
